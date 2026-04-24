@@ -93,28 +93,42 @@ namespace TankVectors
     public static class VehicleDamagePatch
     {
         [HarmonyPrefix]
-        // Имена параметров должны строго соответствовать тем, что видит Harmony в оригинале
         public static bool Prefix(InteractableVehicle vehicle, ref float damage, float times, bool canRepair, CSteamID instigatorSteamID, EDamageOrigin damageOrigin)
         {
-            // 1. Проверки
             if (vehicle == null || damage <= 0 || TankVectorsPlugin.Instance == null) return true;
             if (!TankVectorsPlugin.Instance.ActiveTankSensors.TryGetValue(vehicle.instanceID, out TankArmorProfile armorProfile)) return true;
 
-            // 2. Определение атакующего (используем instigatorSteamID как в ошибке)
             Player attacker = PlayerTool.getPlayer(instigatorSteamID);
             if (attacker == null) return true;
 
             Vector3 originPos = attacker.movement.getVehicle()?.transform.position ?? attacker.transform.position;
             Vector3 dirToAttacker = (originPos - vehicle.transform.position).normalized;
 
-            // 3. Математика
+            // Расчет углов
             float dotForward = Vector3.Dot(vehicle.transform.forward, dirToAttacker);
             float dotUp = Vector3.Dot(vehicle.transform.up, dirToAttacker);
             
-            float finalMultiplier = (dotUp > 0.7f || dotForward < -0.5f) ? armorProfile.RearAndRoofMultiplier : 
-                                    (dotForward > 0.5f ? armorProfile.FrontMultiplier : armorProfile.SideMultiplier);
+            // Определение зоны
+            string hitZone = "SIDE";
+            float finalMultiplier = armorProfile.SideMultiplier;
 
-            // 4. Модификация
+            if (dotUp > 0.7f || dotForward < -0.5f) 
+            { 
+                hitZone = "REAR/ROOF"; 
+                finalMultiplier = armorProfile.RearAndRoofMultiplier; 
+            }
+            else if (dotForward > 0.5f) 
+            { 
+                hitZone = "FRONT"; 
+                finalMultiplier = armorProfile.FrontMultiplier; 
+            }
+
+            // --- ЛОГИРОВАНИЕ ---
+            Logger.Log($"[VECTOR DEBUG] Target: {vehicle.asset.name} | Zone: {hitZone}");
+            Logger.Log($"[VECTOR DEBUG] DotForward: {dotForward:F2} | DotUp: {dotUp:F2}");
+            Logger.Log($"[VECTOR DEBUG] Damage: {damage:F1} -> {damage * finalMultiplier:F1} (x{finalMultiplier})");
+            // -------------------
+
             damage *= finalMultiplier;
 
             return true;
