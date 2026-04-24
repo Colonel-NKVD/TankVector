@@ -5,7 +5,7 @@ using Rocket.Core.Plugins;
 using SDG.Unturned;
 using Steamworks;
 using UnityEngine;
-using HarmonyLib; // Не забудь добавить ссылку на 0Harmony.dll
+using HarmonyLib;
 using Logger = Rocket.Core.Logging.Logger;
 
 namespace TankVectors
@@ -25,7 +25,6 @@ namespace TankVectors
             Instance = this;
             Logger.Log("!!! [DEBUG] TANK_VECTORS: ЗАПУСК СИСТЕМЫ (HARMONY PATCH) !!!");
             
-            // Инициализируем Harmony и применяем патчи
             _harmony = new Harmony(HarmonyInstanceId);
             _harmony.PatchAll(); 
             
@@ -34,7 +33,6 @@ namespace TankVectors
 
         protected override void Unload()
         {
-            // Снимаем патчи при выгрузке
             _harmony.UnpatchAll(HarmonyInstanceId);
             
             ActiveTankSensors.Clear();
@@ -88,69 +86,51 @@ namespace TankVectors
         }
     }
 
-    // --- HARMONY PATCH: ПЕРЕХВАТ УРОНА ---
-    [HarmonyPatch(typeof(VehicleManager), "damage")]
+    // --- ИСПРАВЛЕННЫЙ HARMONY PATCH ---
+    // Указываем точные типы аргументов метода damage
+    [HarmonyPatch(typeof(VehicleManager), "damage", 
+        new Type[] { typeof(InteractableVehicle), typeof(float), typeof(float), typeof(bool), typeof(CSteamID), typeof(EDamageOrigin) })]
     public static class VehicleDamagePatch
     {
         [HarmonyPrefix]
-        public static void Prefix(InteractableVehicle vehicle, ref float damage, ref float repair, ref bool canRepair, CSteamID instigator, EDamageOrigin damageOrigin)
+        public static bool Prefix(InteractableVehicle vehicle, ref float damage, float times, bool canRepair, CSteamID instigator, EDamageOrigin damageOrigin)
         {
-            // Если урон нулевой или машина не в списке отслеживаемых — ничего не делаем
-            if (vehicle == null || damage <= 0 || TankVectorsPlugin.Instance == null) return;
-            if (!TankVectorsPlugin.Instance.ActiveTankSensors.TryGetValue(vehicle.instanceID, out TankArmorProfile armorProfile)) return;
+            // Базовые проверки
+            if (vehicle == null || damage <= 0 || TankVectorsPlugin.Instance == null) return true;
+            if (!TankVectorsPlugin.Instance.ActiveTankSensors.TryGetValue(vehicle.instanceID, out TankArmorProfile armorProfile)) return true;
 
             bool log = TankVectorsPlugin.Instance.Configuration.Instance.EnableDetailedLogging;
 
             // 1. Определение атакующего
             Player attacker = PlayerTool.getPlayer(instigator);
-            if (attacker == null) return;
+            if (attacker == null) return true;
 
-            Vector3 originPos = attacker.transform.position;
-            InteractableVehicle attackerVehicle = attacker.movement.getVehicle();
-            if (attackerVehicle != null) originPos = attackerVehicle.transform.position;
+            Vector3 originPos = attacker.movement.getVehicle()?.transform.position ?? attacker.transform.position;
 
             // 2. Векторная математика
             Vector3 dirToAttacker = (originPos - vehicle.transform.position).normalized;
             float dotForward = Vector3.Dot(vehicle.transform.forward, dirToAttacker);
             float dotUp = Vector3.Dot(vehicle.transform.up, dirToAttacker);
-            float dotRight = Vector3.Dot(vehicle.transform.right, dirToAttacker);
 
-            // 3. Определение сектора и множителя
+            // 3. Определение сектора
             float finalMultiplier = 1.0f;
             string hitZone = "ЛЕВЫЙ/ПРАВЫЙ БОРТ";
 
-            if (dotUp > 0.7f) 
-            {
-                hitZone = "КРЫША (КОРМА)";
-                finalMultiplier = armorProfile.RearAndRoofMultiplier;
-            }
-            else if (dotForward > 0.5f) 
-            {
-                hitZone = "ЛОБ";
-                finalMultiplier = armorProfile.FrontMultiplier;
-            }
-            else if (dotForward < -0.5f) 
-            {
-                hitZone = "КОРМА";
-                finalMultiplier = armorProfile.RearAndRoofMultiplier;
-            }
-            else 
-            {
-                finalMultiplier = armorProfile.SideMultiplier;
-            }
+            if (dotUp > 0.7f) { hitZone = "КРЫША"; finalMultiplier = armorProfile.RearAndRoofMultiplier; }
+            else if (dotForward > 0.5f) { hitZone = "ЛОБ"; finalMultiplier = armorProfile.FrontMultiplier; }
+            else if (dotForward < -0.5f) { hitZone = "КОРМА"; finalMultiplier = armorProfile.RearAndRoofMultiplier; }
+            else { finalMultiplier = armorProfile.SideMultiplier; }
 
-            // 4. Модификация урона (через ref мы меняем значение в самом методе игры)
+            // 4. Модификация урона
             float originalDamage = damage;
             damage *= finalMultiplier;
 
             if (log)
             {
-                Logger.Log("--------------------------------------------------");
-                Logger.Log($"[HARMONY ВЕКТОР] Попадание по: {vehicle.asset.name}");
-                Logger.Log($"[HARMONY ВЕКТОР] Зона: {hitZone} | Множитель: x{finalMultiplier}");
-                Logger.Log($"[HARMONY ВЕКТОР] Урон: {originalDamage} -> {damage}");
-                Logger.Log("--------------------------------------------------");
+                Logger.Log($"[HARMONY ВЕКТОР] Зона: {hitZone} | Урон: {originalDamage} -> {damage}");
             }
+
+            return true; // Продолжаем выполнение оригинального метода
         }
     }
 }
