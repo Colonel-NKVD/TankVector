@@ -16,14 +16,16 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
+    # Используем msbuild для восстановления, это надежнее для .NET 4.8
     - name: Restore NuGet Packages
-      run: nuget restore TankVectors.csproj
+      run: msbuild TankVectors.csproj -t:restore
 
     - name: Build TankVectors
-      run: msbuild TankVectors.csproj /p:Configuration=Release /p:TargetFramework=net48
+      run: msbuild TankVectors.csproj /p:Configuration=Release
 
     - name: Upload TankVectors DLL
       uses: actions/upload-artifact@v4
       with:
         name: TankVectors-Release
-        path: bin/Release/net48/TankVectors.dll
+        # Убран /net48/, так как мы отключили его в .csproj
+        path: bin/Release/TankVectors.dll
