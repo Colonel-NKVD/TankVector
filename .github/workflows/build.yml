@@ -1,0 +1,29 @@
+name: Build TankVectors
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore NuGet Packages
+      run: nuget restore TankVectors.csproj
+
+    - name: Build TankVectors
+      run: msbuild TankVectors.csproj /p:Configuration=Release /p:TargetFramework=net48
+
+    - name: Upload TankVectors DLL
+      uses: actions/upload-artifact@v4
+      with:
+        name: TankVectors-Release
+        path: bin/Release/net48/TankVectors.dll
