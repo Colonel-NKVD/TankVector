@@ -95,7 +95,7 @@ namespace TankVectors
         }
 
         // --- СИСТЕМА ОБРАБОТКИ ВЕКТОРОВ И УРОНА ---
-        private void OnDamageVehicleRequested(CSteamID instigatorSteamID, InteractableVehicle vehicle, ref ushort pendingTotalDamage, ref bool canDamage, ushort instigatorItem, EDamageOrigin damageOrigin)
+        private void OnDamageVehicleRequested(CSteamID instigatorSteamID, InteractableVehicle vehicle, ref ushort pendingTotalDamage, ref bool canDamage, EDamageOrigin damageOrigin)
         {
             if (!canDamage || vehicle == null || pendingTotalDamage == 0) return;
 
